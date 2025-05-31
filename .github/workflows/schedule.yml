@@ -1,0 +1,83 @@
+name: Execute On Schedule
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Executes every 15 minutes
+  workflow_dispatch:  # Manual trigger option
+    
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      security-events: write
+      actions: read
+    
+    steps:
+      - name: Checkout Repository Contents
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for proper git operations
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install Python Packages Requirements
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          elif [ -f requirements ]; then
+            pip install -r requirements
+          else
+            echo "No requirements file found"
+          fi
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          
+      - name: Execute Python Script
+        run: python main.py
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
+          
+      - name: Configure Git
+        run: |
+          git config --local user.email "seyyedsoroushmirzaei@protonmail.com"
+          git config --local user.name "Soroush Mirzaei"
+          
+      - name: Commit and Push Changes
+        run: |
+          git add -A
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "Updated $(TZ='Asia/Tehran' date '+%Y-%m-%d %H:%M %Z')"
+            git push origin main
+          else
+            echo "No changes to commit"
+          fi
+          
+      - name: Clean Up Files and Force Push
+        run: |
+          # Clean cache files without changing branches
+          find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+          find . -name "*.pyc" -delete 2>/dev/null || true
+          find . -name "*.pyo" -delete 2>/dev/null || true
+          find . -name ".pytest_cache" -type d -exec rm -rf {} + 2>/dev/null || true
+          find . -name ".coverage" -delete 2>/dev/null || true
+          
+          # Check if there are any changes after cleanup
+          if ! git diff-index --quiet HEAD; then
+            git add -A
+            git commit -m "Cleanup cache files - $(TZ='Asia/Tehran' date '+%Y-%m-%d %H:%M %Z')"
+            git push origin main
+          else
+            echo "No cache files to clean"
+          fi
